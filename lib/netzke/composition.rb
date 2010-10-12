@@ -5,26 +5,76 @@ module Netzke
     extend ActiveSupport::Concern
     
     included do
-      endpoint :load_component_with_cache # every component gets this api
-    end
+      
+      # Loads a component on browser's request. Every Nettzke component gets this endpoint.
+      # <tt>params</tt> should contain: 
+      # * <tt>:cache</tt> - an array of component classes cached at the browser
+      # * <tt>:id</tt> - reference to the component
+      # * <tt>:container</tt> - Ext id of the container where in which the component will be rendered
+      endpoint :load_component_with_cache do |params|
+        cache = params[:cache].gsub(".", "::").split(",") # array of cached class names (in Ruby)
+        component_name = params.delete(:name).underscore.to_sym
+        component = components[component_name] && component_instance(component_name)
+
+        if component
+          # inform the component that it's being loaded
+          component.before_load
+
+          [{
+            :js => component.js_missing_code(cache), 
+            :css => component.css_missing_code(cache)
+          }, {
+            :render_component_in_container => { # TODO: rename it
+              :container => params[:container], 
+              :config => component.js_config
+            }
+          }, {
+            :component_loaded => {
+              :name => component_name
+            }
+          }]
+        else
+          {:feedback => "Couldn't load component '#{component_name}'"}
+        end
+      end
+      
+    end # included
     
     module ClassMethods
-      def component(name, config)
-        current_components = read_clean_inheritable_hash(:components)
+      # Defines a nested component.
+      # For example:
+      # 
+      #     component :users, :data_class => "GridPanel", :model => "User"
+      def component(name, config = {})
+        config[:class_name] ||= name.to_s.camelize
+        config[:name] = name.to_s
+        
+        current_components = read_inheritable_attribute(:components) || {}
         current_components.merge!(name => config)
         write_inheritable_attribute(:components, current_components)
+      end
+      
+      # Components previously defined on class level
+      def components
+        read_inheritable_attribute(:components) || {}
       end
     end
     
     module InstanceMethods
+      def items
+        if config[:items]
+          @items ||= items_with_normalized_components(config[:items])
+        end
+      end
+      
       def initial_components
         {}
       end
-
+      
+      # All components for this instance, which includes components defined on class level, and components detected in :items
       def components
-        # detect_components_in_config if @components.nil?
-        @components.merge(self.class.read_clean_inheritable_hash(:components) || {})
-        # @components ||= initial_components.merge(initial_late_components.each_pair{|k,v| v.merge!(:lazy_loading => true)})
+        items if @components.nil?
+        self.class.components.merge(@components || {})
       end
 
       def non_late_components
@@ -81,38 +131,6 @@ module Netzke
             # composite.strong_children_config = strong_children_config
           end
           composite
-        end
-      end
-      
-      # API: provides what is necessary for the browser to render a component.
-      # <tt>params</tt> should contain: 
-      # * <tt>:cache</tt> - an array of component classes cached at the browser
-      # * <tt>:id</tt> - reference to the component
-      # * <tt>:container</tt> - Ext id of the container where in which the component will be rendered
-      def load_component_with_cache(params)
-        cache = params[:cache].gsub(".", "::").split(",") # array of cached class names (in Ruby)
-        component_name = params.delete(:name).underscore.to_sym
-        component = components[component_name] && component_instance(component_name)
-
-        if component
-          # inform the component that it's being loaded
-          component.before_load
-
-          [{
-            :js => component.js_missing_code(cache), 
-            :css => component.css_missing_code(cache)
-          }, {
-            :render_component_in_container => { # TODO: rename it
-              :container => params[:container], 
-              :config => component.js_config
-            }
-          }, {
-            :component_loaded => {
-              :name => component_name
-            }
-          }]
-        else
-          {:feedback => "Couldn't load component '#{component_name}'"}
         end
       end
       
@@ -188,26 +206,26 @@ module Netzke
       
       private
         
-        # If :items are specified, recursively detect components in them, and build @js_items - normalized items config that will have component configs
-        # replaced by references to corresponding components.
-        def process_items_config
-          @js_items = config[:items]
-          @component_index = 0 # for automatic naming those components that have no name specified
-          @js_items && detect_components_in_items(@js_items)
-        end
-
-        def detect_components_in_items(items)
-          items.each_with_index do |item, i|
-            if item.is_a?(Hash) && item[:class_name]
-              aggr_name = item[:name] || :"#{item[:class_name].underscore.split("/").last}#{@component_index}"; @component_index += 1
-              @components[aggr_name.to_sym] = item
-              items[i] = js_component(aggr_name)
+        def items_with_normalized_components(items)
+          @components ||= {}
+          @component_index ||= 0
+          items.each_with_index.map do |item, i|
+            if is_component_config?(item)
+              component_name = item[:name] || :"#{item[:class_name].underscore.split("/").last}#{@component_index}"
+              @component_index += 1
+              @components[component_name.to_sym] = item # collect component configs by the way
+              js_component(component_name) # replace current item with a reference to component
             elsif item.is_a?(Hash)
-              item[:items].is_a?(Array) && detect_components_in_items(item[:items])
+              item[:items].is_a?(Array) ? item.merge(:items => items_with_normalized_components(item[:items])) : item
+            else
+              item
             end
           end
         end
-
+        
+        def is_component_config?(c)
+          !!(c.is_a?(Hash) && c[:class_name])
+        end
     end
     
   end

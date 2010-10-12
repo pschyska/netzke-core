@@ -63,14 +63,11 @@ module Netzke
     # (the config hash is not yet available)
     def initialize(conf = {}, parent = nil)
       @passed_config = conf # configuration passed at the moment of instantiation
+      @passed_config.deep_freeze
       @parent        = parent
       @name          = conf[:name].nil? ? short_component_class_name.underscore : conf[:name].to_s
       @global_id     = parent.nil? ? @name : "#{parent.global_id}__#{@name}"
       @flash         = []
-      @components   = {}
-      
-      # Detect components and build normalized @js_items
-      process_items_config
     end
   
     # Short component class name, e.g.: 
@@ -94,7 +91,12 @@ module Netzke
     end
   
     def logger
-      Rails.logger if defined?(Rails)
+      if defined?(Rails)
+        Rails.logger
+      else 
+        require 'logger'
+        Logger.new(STDOUT)
+      end
     end
   
     # 'Netzke::Grid' => 'Grid'
@@ -116,7 +118,7 @@ module Netzke
     
     # override this method to do stuff at the moment of loading by some parent
     def before_load
-      component_session.clear
+      # component_session.clear - we don't do it anymore
     end
 
   end

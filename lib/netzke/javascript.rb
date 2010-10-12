@@ -22,7 +22,6 @@ module Netzke
       end
       
       # Definition of a public JS method, e.g.:
-      # 
       #     js_method :on_call_server, <<-JS
       #       function(){
       #         this.whatsUp();
@@ -40,19 +39,16 @@ module Netzke
         read_clean_inheritable_hash(:js_methods)
       end
 
-      # Definition of JS files which will be dynamically loaded together with this component
-      # e.g. 
-      # js_include "#{File.dirname(__FILE__)}/themis_navigation/static.js"
+      # Definition of JS files which will be dynamically loaded together with this component, e.g.:
+      #     js_include "#{File.dirname(__FILE__)}/my_component/static.js"
       # or
-      # js_include ["#{File.dirname(__FILE__)}/themis_navigation/one.js","#{File.dirname(__FILE__)}/themis_navigation/two.js"]
-      #  This is alternative to defining self.include_js
-      def js_include(param)
-        self.js_included_files << param if param.is_a? String
-        self.js_included_files += param if param.is_a? Array
+      #     js_include "#{File.dirname(__FILE__)}/my_component/one.js","#{File.dirname(__FILE__)}/my_component/two.js"
+      # This is alternative to defining self.include_js
+      def js_include(*args)
+        self.js_included_files += args
       end
       
       # Definition of a public JS property, e.g.:
-      # 
       #     js_property :title, "My Netzke Component"
       def js_property(name, value = nil)
         name = name.to_sym
@@ -66,7 +62,6 @@ module Netzke
       end
       
       # Assignment of multiple public JS properties in a bunch, e.g.:
-      # 
       #     js_properties :title => "My Component", :border => true, :html => "Inner HTML"
       def js_properties(hsh = nil)
         if hsh.nil?
@@ -225,15 +220,14 @@ module Netzke
         res.merge!(:id => global_id)
 
         # Non-late components
-        aggr_hash = {}
-        
-        non_late_components.each_pair do |aggr_name, aggr_config|
-          aggr_instance = component_instance(aggr_name.to_sym)
-          aggr_instance.before_load
-          aggr_hash[aggr_name] = aggr_instance.js_config
+        comp_hash = {}
+        non_late_components.each_pair do |comp_name, comp_config|
+          comp_instance = component_instance(comp_name.to_sym)
+          comp_instance.before_load
+          comp_hash[comp_name] = comp_instance.js_config
         end
         
-        res[:components] = aggr_hash unless aggr_hash.empty?
+        res[:components] = comp_hash unless comp_hash.empty?
 
         # Api (besides the default "load_component_with_cache" - JavaScript side already knows about it)
         endpoints = self.class.endpoints - [:load_component_with_cache]
@@ -248,7 +242,7 @@ module Netzke
         # Merge with the rest of config options, besides those that are only meant for the server side
         res.merge!(config.reject{ |k,v| self.class.server_side_config_options.include?(k.to_sym) })
         
-        res[:items] = @js_items
+        res[:items] = items
         
         res
       end
