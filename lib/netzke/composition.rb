@@ -11,7 +11,7 @@ module Netzke
       # * <tt>:cache</tt> - an array of component classes cached at the browser
       # * <tt>:id</tt> - reference to the component
       # * <tt>:container</tt> - Ext id of the container where in which the component will be rendered
-      endpoint :load_component_with_cache do |params|
+      endpoint :deliver_component do |params|
         cache = params[:cache].gsub(".", "::").split(",") # array of cached class names (in Ruby)
         component_name = params.delete(:name).underscore.to_sym
         component = components[component_name] && component_instance(component_name)
@@ -21,17 +21,10 @@ module Netzke
           component.before_load
 
           [{
-            :js => component.js_missing_code(cache), 
-            :css => component.css_missing_code(cache)
+            :eval_js => component.js_missing_code(cache), 
+            :eval_css => component.css_missing_code(cache)
           }, {
-            :render_component_in_container => { # TODO: rename it
-              :container => params[:container], 
-              :config => component.js_config
-            }
-          }, {
-            :component_loaded => {
-              :name => component_name
-            }
+            :component_delivered => component.js_config
           }]
         else
           {:feedback => "Couldn't load component '#{component_name}'"}
@@ -63,7 +56,7 @@ module Netzke
     module InstanceMethods
       def items
         if config[:items]
-          @items ||= items_with_normalized_components(config[:items])
+          @items ||= normalize_components(config[:items])
         end
       end
       
@@ -206,7 +199,7 @@ module Netzke
       
       private
         
-        def items_with_normalized_components(items)
+        def normalize_components(items)
           @components ||= {}
           @component_index ||= 0
           items.each_with_index.map do |item, i|
@@ -216,7 +209,7 @@ module Netzke
               @components[component_name.to_sym] = item # collect component configs by the way
               js_component(component_name) # replace current item with a reference to component
             elsif item.is_a?(Hash)
-              item[:items].is_a?(Array) ? item.merge(:items => items_with_normalized_components(item[:items])) : item
+              item[:items].is_a?(Array) ? item.merge(:items => normalize_components(item[:items])) : item
             else
               item
             end

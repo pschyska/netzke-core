@@ -227,10 +227,12 @@ module Netzke
           comp_hash[comp_name] = comp_instance.js_config
         end
         
+        # All our non-lazy-loaded children are specified here, while in +items+ we barely reference them, because
+        # +items+, generally, only contain a subset of all non-lazy-loaded children.
         res[:components] = comp_hash unless comp_hash.empty?
 
-        # Api (besides the default "load_component_with_cache" - JavaScript side already knows about it)
-        endpoints = self.class.endpoints - [:load_component_with_cache]
+        # Api (besides the default "deliver_component" - JavaScript side already knows about it)
+        endpoints = self.class.endpoints - [:deliver_component]
         res.merge!(:endpoints => endpoints) unless endpoints.empty?
 
         # Inform the JavaScript side if persistent_config is enabled
