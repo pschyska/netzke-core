@@ -83,9 +83,22 @@ module Netzke
       self.name.sub(/^Netzke::/, "")
     end
 
+    def self.constantize_or_false(class_name)
+	  names = class_name.split('::')
+	  names.shift if names.empty? || names.first.empty?
+	  constant = Object
+	  names.each do |name|
+		constant = constant.const_defined?(name) ? constant.const_get(name) : nil
+		return false unless constant
+      end
+      constant
+	end
+
     # Component class, given its name
     def self.constantize_class_name(class_name)
-      "#{class_name}".constantize rescue "Netzke::#{class_name}".constantize
+	  return class_name unless class_name.is_a?(String) || class_name.is_a?(Symbol)
+	  constantize_or_false(class_name) || "Netzke::#{class_name}".constantize
+	  # "#{class_name}".constantize rescue "Netzke::#{class_name}".constantize
     end
     
     def constantize_class_name(class_name)
