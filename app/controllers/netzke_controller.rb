@@ -70,6 +70,7 @@ class NetzkeController < ApplicationController
   end
   
   private
+  # Invoke an endpoint on a component and return the result wrapped in Ext.direct-compatible JSON
   def invoke_endpoint component_name, action, data, tid
     data=data[0] || {} # we get data as an array, extract the single argument if available
 
@@ -86,22 +87,47 @@ class NetzkeController < ApplicationController
     #  => type: rpc
     #  => tid, action, method as in the request, so that the client can mark the transaction and won't retry it
     #  => result: JavaScript code from he endpoint result which gets applied to the client-side component instance
-    result=root_component.send(endpoint_action, data)
+    result=root_component.send(endpoint_action.to_sym, data)
     return "{ \"type\": \"rpc\", \"tid\": #{tid}, \"action\": \"#{component_name}\", \"method\": \"#{action}\", \"result\": #{result.blank? ? '{}' : result}}"
   end
+  
+  # helper method to recursiveley symbolize keys
+  def deep_symbolize_keys hash
+    hash.inject({}) do |options, (key, value)|
+      options[(key.to_sym rescue key) || key] = begin
+         if value.kind_of?(Hash)
+           deep_symbolize_keys(value)
+        elsif value.kind_of?(Array)
+          value.inject([]) do |arr, el|
+             if el.kind_of?(Hash)
+               arr << deep_symbolize_keys(el)
+             else
+               arr << el
+             end
+          end
+        else
+          value
+        end
+       end
+      options
+    end
+  end
+  
   public  
 
   # Handler for Ext.Direct RPC calls
   def direct
+    # we get application/x-www-form-urlencoded POST, with JSON in "data" field
+    req_data=deep_symbolize_keys(JSON.parse params["data"])
     result=""
-    if params['_json'] # this is a batched request
-      params['_json'].each do |batch|
+    if req_data[:data].kind_of? Array # this is a batched request
+      req_data[:data].each do |batch|
         result+= result.blank? ? '[' : ', '
         result+=invoke_endpoint batch[:act], batch[:method].underscore, batch[:data], batch[:tid]
       end
       result+=']'
-    else # this is a single request
-      result=invoke_endpoint params[:act], params[:method].underscore, params[:data], params[:tid]
+    else # this is a single request      
+      result=invoke_endpoint req_data[:act], req_data[:method].underscore, req_data[:data], req_data[:tid]
     end
     render :text => result, :layout => false    
   end

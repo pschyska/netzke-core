@@ -115,10 +115,39 @@ Netzke.classes.NetzkeRemotingProvider=Ext.extend(Ext.direct.RemotingProvider,{
   addAction: function(action, methods) {
     var cls = this.namespace[action] || (this.namespace[action] = {});
     for(var i = 0, len = methods.length; i < len; i++){
-        var m = methods[i];
-        cls[m.name] = this.createMethod(action, m);
+      var m = methods[i];
+      cls[m.name] = this.createMethod(action, m);
     }
-  }
+  },
+  doSend : function(data){
+    this.enableUrlEncode=true
+    var o = {
+      url: this.url,
+      callback: this.onData,
+      scope: this,
+      ts: data,
+      timeout: this.timeout
+    }, callData;
+
+    if(Ext.isArray(data)){
+      callData = [];
+      for(var i = 0, len = data.length; i < len; i++){
+        callData.push(this.getCallData(data[i]));
+      }
+    }else{
+      callData = this.getCallData(data);
+    }
+
+    if(this.enableUrlEncode){
+      var params = {};
+      params[Ext.isString(this.enableUrlEncode) ? this.enableUrlEncode : 'data'] = Ext.encode(callData);
+      o.params = params;
+    }else{
+      o.jsonData = callData;
+    }
+    console.info("!!! o:", o);
+    Ext.Ajax.request(o);
+  },  
 });
 
 Netzke.netzkeRemotingProvider=new Netzke.classes.NetzkeRemotingProvider({
